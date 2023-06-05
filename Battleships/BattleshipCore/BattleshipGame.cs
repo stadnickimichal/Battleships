@@ -12,57 +12,59 @@ namespace BattleshipCore
     public class BattleshipGame : IBattleshipGame
     {
         public bool IsGameOn { get; set; }
-        public BattleshipGame(IGameRenderer renderer, IShipGenerator shipGenerator, IValidator<string> userInputValidator)
+        public BattleshipGame(IGameRenderer renderer, IShipGenerator shipGenerator, IValidator<string> userInputValidator, 
+            IGameboardManager gameboardManager)
         {
             _renderer = renderer;
-            _shipGenerator= shipGenerator;
+            _shipGenerator = shipGenerator;
             _userInputValidator = userInputValidator;
+            _gameboardManager = gameboardManager;
         }
 
-        private Gameboard _gameboard;
+        public Gameboard Gameboard;
         private GameSettings _settings;
         private List<Ship> _shipList = new List<Ship>();
         private IGameRenderer _renderer;
         private IShipGenerator _shipGenerator;
         private IValidator<string> _userInputValidator;
+        private IGameboardManager _gameboardManager;
 
         public void Start(GameSettings settings)
         {
             IsGameOn = true;
             _settings = settings;
-            _gameboard = InitializeGameboard();
-            _gameboard.ShipsRemaining = _shipList.Count();
-            _renderer.Render(_gameboard);
+            Gameboard = InitializeGameboard();
+            Gameboard.ShipsRemaining = _shipList.Count();
+            _renderer.Render(Gameboard);
         }
 
-        public bool MakeAMove(string userMove)
+        public bool MakeAMove(string userInput)
         {
             if (!IsGameOn)
             {
                 throw new NotInicializedGameException();
             }
 
-            var validationResult = _userInputValidator.Validate(userMove);
+            var validationResult = _userInputValidator.Validate(userInput);
             if (!validationResult.IsValid)
             {
-                _gameboard.Message = validationResult.ValidationMessage;
-                _renderer.Render(_gameboard);
+                Gameboard.Message = validationResult.ValidationMessage;
+                _renderer.Render(Gameboard);
                 return true;
             }
 
-            (int column, int row) = GetSquareIndexes(userMove);
-            if ((_gameboard.Board[row, column] & SquareTypes.Revealed) == SquareTypes.Revealed)
+            if (_gameboardManager.RevielSquare(userInput, Gameboard))
             {
-                _gameboard.Message = "You have already shoot at this coordinates, plase chose some other place!";
-                _renderer.Render(_gameboard);
+                Gameboard.Message = "You have already shoot at this coordinates, plase chose some other place!";
+                _renderer.Render(Gameboard);
                 return true;
             }
             else
             {
-                _gameboard.Board[row, column] = _gameboard.Board[row, column] | SquareTypes.Revealed;
-                if ((_gameboard.Board[row, column] & SquareTypes.Ship) == SquareTypes.Ship)
+                (int column, int row) = Gameboard.GetSquareIndexesBaseOnUserInput(userInput);
+                if ((Gameboard.Board[row, column] & SquareTypes.Ship) == SquareTypes.Ship)
                 {
-                    _gameboard.Message = "Hit";
+                    Gameboard.Message = "Hit";
                     Ship shipHit;
                     foreach (var ship in _shipList.Where(s => !s.Sunk))
                     {
@@ -74,67 +76,48 @@ namespace BattleshipCore
                         {
                             continue;
                         }
-                        if (ship.GetShipSquares().All(s => (_gameboard.Board[s.row, s.column] & SquareTypes.Revealed) == SquareTypes.Revealed))
+                        if (ship.GetShipSquares().All(s => (Gameboard.Board[s.row, s.column] & SquareTypes.Revealed) == SquareTypes.Revealed))
                         {
                             ship.Sunk = true;
-                            _gameboard.ShipsRemaining = _shipList.Count(s => !s.Sunk);
-                            _gameboard.Message = "Hit and sink";
+                            Gameboard.ShipsRemaining = _shipList.Count(s => !s.Sunk);
+                            Gameboard.Message = "Hit and sink";
                             break;
                         }
                     }
                 }
                 else
                 {
-                    _gameboard.Message = "Miss";
+                    Gameboard.Message = "Miss";
                 }
 
                 if(_shipList.All(s => s.Sunk))
                 {
-                    _gameboard.Message = "You Have Won!!";
-                    _renderer.Render(_gameboard);
+                    Gameboard.Message = "You Have Won!!";
+                    _renderer.Render(Gameboard);
                     IsGameOn = false;
                     return false;
                 }
                 else
                 {
-                    _renderer.Render(_gameboard);
+                    _renderer.Render(Gameboard);
                     return true;
                 }
             }
         }
 
-        private (int column, int row) GetSquareIndexes(string userMove)
-        {
-            int columnPartLength = 1;
-            int columnPartBeginingIndex = 0;
-            int rowPartBeginingIndex = 1;
-            int charToIntShift = 65;
-
-            var column = char.ToUpper(char.Parse(userMove.Substring(columnPartBeginingIndex, columnPartLength))) - charToIntShift;
-            var row = int.Parse(userMove.Substring(rowPartBeginingIndex)) - 1;
-            return (column, row);
-        }
-
         private Gameboard InitializeGameboard()
         {
-            _gameboard = new Gameboard();
-            for (int i = 0; i < 10; i++)
-            {
-                for (int j = 0; j < 10; j++)
-                {
-                    _gameboard.Board[i, j] = SquareTypes.Unrevealed;
-                }
-            }
+            Gameboard = new Gameboard();
             foreach (var item in _settings.ShipstToPlaceOnGameboard)
             {
                 for (int i = 0; i < item.Value; i++)
                 {
-                    var ship = _shipGenerator.GenerateShip(_gameboard, item.Key);
+                    var ship = _shipGenerator.GenerateShip(Gameboard, item.Key);
                     PlaceShipOnGameboard(ship);
                     _shipList.Add(ship);
                 }
             }
-            return _gameboard;
+            return Gameboard;
         }
 
         private void PlaceShipOnGameboard(Ship ship)
@@ -143,11 +126,11 @@ namespace BattleshipCore
             {
                 if (ship.IsVertical)
                 {
-                    _gameboard.Board[ship.FirstSquareRowIndex + i, ship.FirstSquareColumnIndex] = SquareTypes.Ship | SquareTypes.Unrevealed;
+                    Gameboard.Board[ship.FirstSquareRowIndex + i, ship.FirstSquareColumnIndex] = SquareTypes.Ship | SquareTypes.Unrevealed;
                 }
                 else
                 {
-                    _gameboard.Board[ship.FirstSquareRowIndex, ship.FirstSquareColumnIndex + i] = SquareTypes.Ship | SquareTypes.Unrevealed;
+                    Gameboard.Board[ship.FirstSquareRowIndex, ship.FirstSquareColumnIndex + i] = SquareTypes.Ship | SquareTypes.Unrevealed;
                 }
             }
         }

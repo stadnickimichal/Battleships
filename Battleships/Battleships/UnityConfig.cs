@@ -20,8 +20,9 @@ namespace Battleships
             container.RegisterType<IShipGenerator, ShipGenerator>();
             container.RegisterType<IRandomGenerator, BaseRandomGenerator>();
             container.RegisterType<IValidator<string>, UserInputValidator>();
+            container.RegisterType<IGameboardManager, GameboardManager> ();
 
-            return container;
+            return container; 
         }
     }
 }
